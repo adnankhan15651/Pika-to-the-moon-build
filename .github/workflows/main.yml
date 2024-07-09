@@ -1,0 +1,35 @@
+name: 'deploy-to-s3'
+
+on:
+  push:
+    branches:
+      - main
+
+# Used to allow read and write access on GitHub Actions to the repository. Required to allow OIDC authentication.
+permissions:
+  id-token: write
+  contents: read
+  
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    # Doc: https://github.com/aws-actions/configure-aws-credentials#OIDC
+    - name: Authenticate to AWS
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+    - name: Remove old build from S3 bucket
+      run: aws s3 rm s3://${{ secrets.BUCKET_NAME }} --recursive
+
+    - name: Deploy code to S3 bucket
+      run: aws s3 cp . s3://${{ secrets.BUCKET_NAME }} --recursive --exclude 'awscliv2.zip' --exclude 'aws' --exclude '.git' --exclude '.github'
+
+    - name: Create CloudFront invalidation
+      run: aws cloudfront create-invalidation --distribution-id ${{ secrets.DISTRIBUTION_ID }} --paths '/*'
